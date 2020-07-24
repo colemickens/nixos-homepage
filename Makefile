@@ -1,4 +1,3 @@
-NIXOS_SERIES = 20.03
 ROOT = "/"
 
 rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
@@ -11,7 +10,7 @@ HTML = index.html download.html news.html learn.html community.html \
   teams/rfc-steering-committee.html teams/security.html teams/marketing.html \
   teams/nixos_release.html teams/infrastructure.html teams/nixcon.html \
   teams/discourse.html \
-  guides/contributing.html \
+  guides/contributing.html guides/install-nix.html guides/ad-hoc-developer-environments.html \
   404.html
 
 
@@ -86,27 +85,24 @@ favicon.ico: favicon.png
 %-small.png: %.png
 	convert -resize 200 $< $@
 
-%.html: %.tt layout.tt common.tt nix-release.tt nixos-release.tt
+%.html: %.tt layout.tt common.tt
 	tpage \
 	  --pre_chomp --post_chomp \
 	  --define root=$(ROOT) \
 	  --define fileName=$< \
 	  --define nixosAmis=$(NIXOS_AMIS) \
-	  --pre_process=nix-release.tt --pre_process=nixos-release.tt --pre_process=common.tt \
+	  --define latestNixVersion=$(NIX_VERSION) \
+	  --define latestNixOSSeries=$(NIXOS_SERIES) \
+	  --pre_process=common.tt \
 	  $< > $@.tmp
 	xmllint --nonet --noout $@.tmp
 	mv $@.tmp $@
 
-# FIXME: hacky. The channel generator should put up a JSON file.
-nixos-release.tt:
-	uri=$$(curl --fail --silent -o /dev/null -w %{redirect_url} https://nixos.org/channels/nixos-${NIXOS_SERIES}); \
-	version=$$(echo $$uri | sed 's|.*/nixos-||'); \
-	echo "[%- latestNixOSSeries = \"${NIXOS_SERIES}\"; -%]" > $@
-
-%: %.in common.tt nix-release.tt
+%: %.in common.tt
 	echo $$PATH
 	tpage \
-	  --pre_process=nix-release.tt --pre_process=common.tt $< > $@.tmp
+	  --define latestNixVersion=$(NIX_VERSION) \
+	  --pre_process=common.tt $< > $@.tmp
 	mv $@.tmp $@
 
 news.html: all-news.xhtml
@@ -123,8 +119,8 @@ index.html: news-rss.xml latest-news.xhtml blogs.json
 latest-news.xhtml: news.xml news.xsl
 	xsltproc --param maxItem 12 news.xsl news.xml > $@ || rm -f $@
 
-check:
-	checklink $(HTML)
+check: $(HTML)
+	bash check-links.sh
 
 blogs.xml:
 	curl --fail https://planet.nixos.org/rss20.xml > $@.tmp
@@ -135,8 +131,8 @@ blogs.json: blogs.xml
 	mv $@.tmp $@
 
 ifeq ($(UPDATE), 1)
-.PHONY: blogs.xml nixos-release.tt
-update: blogs.xml nixos-release.tt
+.PHONY: blogs.xml
+update: blogs.xml
 	@true
 endif
 
